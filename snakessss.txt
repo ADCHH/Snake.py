@@ -1,0 +1,439 @@
+import pygame
+import random
+import pickle
+import os
+
+# Initialize Pygame
+pygame.init()
+
+# Set up the screen
+WIDTH, HEIGHT = 800, 600
+CELL_SIZE = 20
+GRID_WIDTH, GRID_HEIGHT = WIDTH // CELL_SIZE, HEIGHT // CELL_SIZE
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Snake Game")
+
+# Colors
+WHITE = (255, 255, 255)
+GREEN = (0, 255, 0)
+DARK_GREEN = (0, 155, 0)
+RED = (255, 0, 0)
+DARK_RED = (155, 0, 0)
+BLACK = (0, 0, 0)
+GRAY = (128, 128, 128)
+
+# List of questions and answers
+questions = [
+    {"question": "What is the result of '2 + 3 * 4' in Python?", "answer": "14"},
+    {"question": "What is the result of '3**2' in Python?", "answer": "9"},
+    {"question": "What is the keyword used for creating a function in Python?", "answer": "def"},
+    # Add more questions as needed
+]
+
+# Load or create leaderboard
+def load_leaderboard():
+    if os.path.exists('leaderboard.pkl'):
+        with open('leaderboard.pkl', 'rb') as f:
+            return pickle.load(f)
+    else:
+        return {}
+
+# Save leaderboard
+def save_leaderboard(leaderboard):
+    with open('leaderboard.pkl', 'wb') as f:
+        pickle.dump(leaderboard, f)
+
+class Snake:
+    def __init__(self):
+        self.body = [(GRID_WIDTH // 2, GRID_HEIGHT // 2)]
+        self.direction = random.choice(["UP", "DOWN", "LEFT", "RIGHT"])
+        self.speed = 5  # Default speed
+
+    def move(self):
+        head = self.body[0]
+        if self.direction == "UP":
+            new_head = (head[0], head[1] - 1)
+        elif self.direction == "DOWN":
+            new_head = (head[0], head[1] + 1)
+        elif self.direction == "LEFT":
+            new_head = (head[0] - 1, head[1])
+        elif self.direction == "RIGHT":
+            new_head = (head[0] + 1, head[1])
+        
+        self.body.insert(0, new_head)
+        self.body.pop()  # Remove the tail
+
+    def grow(self):
+        self.body.append(self.body[-1])
+
+    def draw(self):
+        for index, segment in enumerate(self.body):
+            if index == 0:
+                # Draw the head with eyes
+                pygame.draw.circle(screen, GREEN, (segment[0] * CELL_SIZE + CELL_SIZE // 2, segment[1] * CELL_SIZE + CELL_SIZE // 2), CELL_SIZE // 2)
+                # Draw eyes (two dots)
+                eye_radius = 3
+                left_eye_pos = (segment[0] * CELL_SIZE + CELL_SIZE // 3, segment[1] * CELL_SIZE + CELL_SIZE // 3)
+                right_eye_pos = (segment[0] * CELL_SIZE + 2 * CELL_SIZE // 3, segment[1] * CELL_SIZE + CELL_SIZE // 3)
+                pygame.draw.circle(screen, WHITE, left_eye_pos, eye_radius)
+                pygame.draw.circle(screen, WHITE, right_eye_pos, eye_radius)
+            else:
+                # Draw the body segment
+                pygame.draw.circle(screen, DARK_GREEN, (segment[0] * CELL_SIZE + CELL_SIZE // 2, segment[1] * CELL_SIZE + CELL_SIZE // 2), CELL_SIZE // 2)
+
+
+
+# Food class
+class Food:
+    def __init__(self):
+        self.position = self.generate_food_position()
+
+    def generate_food_position(self):
+        return random.randint(0, GRID_WIDTH-1), random.randint(0, GRID_HEIGHT-1)
+
+    def draw(self):
+        pygame.draw.ellipse(screen, DARK_RED, (self.position[0] * CELL_SIZE, self.position[1] * CELL_SIZE, CELL_SIZE, CELL_SIZE))
+        pygame.draw.ellipse(screen, RED, (self.position[0] * CELL_SIZE + 2, self.position[1] * CELL_SIZE + 2, CELL_SIZE - 4, CELL_SIZE - 4))
+
+# Obstacle class
+class Obstacle:
+    def __init__(self, level):
+        self.positions = self.generate_obstacles(level)
+
+    def generate_obstacles(self, level):
+        num_obstacles = 5  # Easy level by default
+        if 6 <= level <= 10:
+            num_obstacles = 10  # Medium level
+        elif level > 10:
+            num_obstacles = 20  # Hard level
+
+        positions = []
+        while len(positions) < num_obstacles:
+            position = (random.randint(0, GRID_WIDTH-1), random.randint(0, GRID_HEIGHT-1))
+            if position not in positions:
+                positions.append(position)
+        return positions
+
+    def draw(self):
+        for position in self.positions:
+            pygame.draw.rect(screen, GRAY, (position[0] * CELL_SIZE, position[1] * CELL_SIZE, CELL_SIZE, CELL_SIZE))
+
+# Draw grid lines
+def draw_grid():
+    for x in range(0, WIDTH, CELL_SIZE):
+        pygame.draw.line(screen, BLACK, (x, 0), (x, HEIGHT))
+    for y in range(0, HEIGHT, CELL_SIZE):
+        pygame.draw.line(screen, BLACK, (0, y), (WIDTH, y))
+
+# Display main menu
+def main_menu():
+    # Load background image
+    background_img = pygame.image.load("bg.png")
+    background_img = pygame.transform.scale(background_img, (WIDTH, HEIGHT))
+
+    # Font initialization
+    font = pygame.font.Font(None, 50)
+
+    # Button text and rect initialization
+    play_text = font.render("PLAY", True, WHITE)
+    play_rect = play_text.get_rect(center=(WIDTH // 2, HEIGHT // 1.5 - 5))
+    leaderboard_text = font.render("LEADERBOARD", True, WHITE)
+    leaderboard_rect = leaderboard_text.get_rect(center=(WIDTH // 2, HEIGHT // 2 + 160))
+
+    # Main menu loop
+    running = True
+    while running:
+        # Handle events
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                quit()
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                x, y = event.pos
+                if play_rect.collidepoint(x, y):
+                    player_name = input_player_name()
+                    main(player_name)  # Start the game with the player's name
+                elif leaderboard_rect.collidepoint(x, y):
+                    display_leaderboard()
+
+        # Draw background image
+        screen.blit(background_img, (0, 0))
+
+        # Draw buttons with hover effect
+        mouse_pos = pygame.mouse.get_pos()
+        if play_rect.collidepoint(mouse_pos):
+            pygame.draw.rect(screen, DARK_GREEN, play_rect)
+        else:
+            pygame.draw.rect(screen, BLACK, play_rect)
+        if leaderboard_rect.collidepoint(mouse_pos):
+            pygame.draw.rect(screen, DARK_GREEN, leaderboard_rect)
+        else:
+            pygame.draw.rect(screen, BLACK, leaderboard_rect)
+
+        # Draw button text
+        screen.blit(play_text, play_rect)
+        screen.blit(leaderboard_text, leaderboard_rect)
+
+        pygame.display.flip()
+
+
+    
+# Input player name
+def input_player_name():
+    # Load background image
+    background_img = pygame.image.load("bg.png")
+    background_img = pygame.transform.scale(background_img, (WIDTH, HEIGHT))
+
+    # Font initialization
+    font = pygame.font.Font(None, 50)
+    
+    # Input text initialization
+    input_text = ""
+    name_entered = False
+
+    # Player name input loop
+    while not name_entered:
+        # Handle events
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                quit()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN:
+                    name_entered = True
+                elif event.key == pygame.K_BACKSPACE:
+                    input_text = input_text[:-1]
+                else:
+                    input_text += event.unicode
+
+        # Draw background image
+        screen.blit(background_img, (0, 0))
+
+        # Draw input text
+        text_surface = font.render("Enter your name: " + input_text, True, WHITE)
+        screen.blit(text_surface, (WIDTH // 4, HEIGHT // 1.2 - 150))
+
+
+        pygame.display.flip()
+
+
+
+# Function to display try again button
+def try_again(current_level):
+    # Load background image
+    background_img = pygame.image.load("GAMEOVER_BG.png")
+    background_img = pygame.transform.scale(background_img, (WIDTH, HEIGHT))
+
+    # Font initialization
+    font = pygame.font.Font(None, 45)
+    
+    # Render "TRY AGAIN" button
+    try_again_text = font.render("TRY AGAIN", True, WHITE)
+    try_again_rect = try_again_text.get_rect(center=(WIDTH // 2, HEIGHT // 2 - 10))
+    
+    # Render "RETURN" button
+    return_text = font.render("RETURN", True, WHITE)
+    return_rect = return_text.get_rect(center=(WIDTH // 2, HEIGHT // 2 + 50))
+
+    # Display buttons and background image
+    screen.blit(background_img, (0, 0))
+
+    # Draw buttons with hover effect
+    mouse_pos = pygame.mouse.get_pos()
+    if try_again_rect.collidepoint(mouse_pos):
+        pygame.draw.rect(screen, DARK_GREEN, try_again_rect)
+    else:
+        pygame.draw.rect(screen, BLACK, try_again_rect)
+    if return_rect.collidepoint(mouse_pos):
+        pygame.draw.rect(screen, DARK_GREEN, return_rect)
+    else:
+        pygame.draw.rect(screen, BLACK, return_rect)
+
+    # Draw button text
+    screen.blit(try_again_text, try_again_rect)
+    screen.blit(return_text, return_rect)
+
+    pygame.display.flip()
+
+    # Button event loop
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                quit()
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                x, y = event.pos
+                if try_again_rect.collidepoint(x, y):
+                    return current_level  # Return the current level when "TRY AGAIN" is clicked
+                elif return_rect.collidepoint(x, y):
+                    main_menu()
+            elif event.type == pygame.MOUSEMOTION:
+                mouse_pos = event.pos
+                if try_again_rect.collidepoint(mouse_pos) or return_rect.collidepoint(mouse_pos):
+                    pygame.mouse.set_cursor(*pygame.cursors.tri_left)
+                else:
+                    pygame.mouse.set_cursor(*pygame.cursors.arrow)
+
+
+    # Button event loop
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                quit()
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                x, y = event.pos
+                if try_again_rect.collidepoint(x, y):
+                    return current_level  # Return the current level when "TRY AGAIN" is clicked
+                elif return_rect.collidepoint(x, y):
+                    main_menu()
+
+
+def main(player_name, level=1):  # Add level as an optional argument with a default value of 1
+    snake = Snake()
+    food = Food()
+    score = 0
+
+    # Place obstacles
+    obstacles = Obstacle(level)  # Generate obstacles based on the current level
+
+    # Initial snake speed
+    snake_speed = 5
+
+    clock = pygame.time.Clock()
+
+    # Load background image
+    background_img = pygame.image.load("grid_bg.png")
+    background_img = pygame.transform.scale(background_img, (WIDTH, HEIGHT))
+
+    running = True
+    while running:
+        screen.blit(background_img, (0, 0))  # Display background image
+        
+        # Render player name on the top left side
+        font = pygame.font.Font(None, 30)
+        player_text = font.render(f"Player: {player_name}", True, WHITE)
+        player_rect = player_text.get_rect(topleft=(10, 10))
+        screen.blit(player_text, player_rect)
+
+        # Render level below player name
+        level_text = font.render(f"Level: {level}", True, WHITE)
+        level_rect = level_text.get_rect(topleft=(10, player_rect.bottom + 10))
+        screen.blit(level_text, level_rect)
+
+        # Render score on the top right side
+        score_text = font.render(f"Score: {score}", True, WHITE)
+        score_rect = score_text.get_rect(topright=(WIDTH - 10, 10))
+        screen.blit(score_text, score_rect)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                quit()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_UP and snake.direction != "DOWN":
+                    snake.direction = "UP"
+                elif event.key == pygame.K_DOWN and snake.direction != "UP":
+                    snake.direction = "DOWN"
+                elif event.key == pygame.K_LEFT and snake.direction != "RIGHT":
+                    snake.direction = "LEFT"
+                elif event.key == pygame.K_RIGHT and snake.direction != "LEFT":
+                    snake.direction = "RIGHT"
+
+        snake.move()
+
+        # Check if the snake hits the wall or obstacle
+        if (snake.body[0][0] < 0 or snake.body[0][0] >= GRID_WIDTH or
+            snake.body[0][1] < 0 or snake.body[0][1] >= GRID_HEIGHT or
+            snake.body[0] in obstacles.positions):
+            new_level = try_again(level)  # Pass the current level as an argument to try_again()
+            if new_level is not None:
+                level = new_level  # Update the level with the returned value
+                main(player_name, level)  # Restart the game with the same level
+            else:
+                # Update leaderboard with player's name and level
+                leaderboard = load_leaderboard()
+                leaderboard[player_name] = level
+                save_leaderboard(leaderboard)
+                main_menu()
+
+        if snake.body[0] == food.position:
+            snake.grow()
+            food.position = food.generate_food_position()
+            score += 1
+            print("Score:", score)
+            if score % 5 == 0:
+                level += 1  # Increase level after every 5 foods
+                print("Level up! Level:", level)
+                print("Question pop-up after eating 5 foods!")
+                pygame.time.wait(2000)  # Wait for 2 seconds
+                # Display question and check answer
+                print("Displaying question...")
+                # Question handling goes here
+                question = random.choice(questions)
+                answer = input(question["question"] + "\n")
+                if answer.lower() == question["answer"].lower():
+                    snake_speed += 0.5  # Increase snake speed after answering correctly
+                else:
+                    print("Incorrect answer. Try again.")
+        
+        snake.draw()
+        food.draw()
+        obstacles.draw()
+
+        pygame.display.flip()
+        clock.tick(int(snake_speed))  # Adjust snake speed here
+
+    pygame.quit()
+
+
+def display_leaderboard():
+    leaderboard = load_leaderboard()
+
+    font = pygame.font.Font(None, 36)
+    y_offset = 100
+
+    # Load background image
+    background_img = pygame.image.load("grid_bg.png")
+    background_img = pygame.transform.scale(background_img, (WIDTH, HEIGHT))
+    screen.blit(background_img, (0, 0))
+
+    # Render leaderboard title
+    title_text = font.render("LEADERBOARD", True, WHITE)
+    title_rect = title_text.get_rect(center=(WIDTH // 2, 50))
+    screen.blit(title_text, title_rect)
+
+    # Render table headers
+    header_text = font.render("Rank     Player     Level", True, WHITE)
+    header_rect = header_text.get_rect(midtop=(WIDTH // 2, 100))
+    screen.blit(header_text, header_rect)
+
+    # Render leaderboard content
+    rank = 1
+    for user_name, level in sorted(leaderboard.items(), key=lambda x: x[1], reverse=True):
+        entry_text = font.render(f"{rank}.     {user_name}     {level}", True, WHITE)
+        entry_rect = entry_text.get_rect(midtop=(WIDTH // 2, y_offset))
+        screen.blit(entry_text, entry_rect)
+        y_offset += 40
+        rank += 1
+
+    # Add return button
+    return_button_text = font.render("RETURN", True, WHITE)
+    return_button_rect = return_button_text.get_rect(center=(WIDTH // 2, HEIGHT - 50))
+    screen.blit(return_button_text, return_button_rect)
+
+    pygame.display.flip()
+
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                quit()
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                x, y = event.pos
+                if return_button_rect.collidepoint(x, y):
+                    main_menu()
+
+
+if __name__ == "__main__":
+    main_menu()
